@@ -1,0 +1,5 @@
+name=美团众包增强
+description=配送辅助模块
+minApiVersion=102
+targetApiVersion=102
+staticScope=true

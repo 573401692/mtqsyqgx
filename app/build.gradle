@@ -1,0 +1,54 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.mtqsyqgx.app'
+    compileSdkVersion 35
+    buildToolsVersion "33.0.0"
+    
+    defaultConfig {
+        applicationId "com.mtqsyqgx.app"
+        minSdkVersion 30
+        targetSdkVersion 35
+        versionCode 176
+        versionName "1.7.6"
+    }
+
+    signingConfigs {
+        release {
+            def keystorePropertiesFile = rootProject.file("keystore.properties")
+            if (keystorePropertiesFile.exists()) {
+                def keystoreProperties = new Properties()
+                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
+        }
+    }
+    
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+dependencies {
+    compileOnly 'io.github.libxposed:api:102.0.0'
+    implementation files('libs/libxposed-service-102.jar', 'libs/libxposed-interface-102.jar')
+}
