@@ -631,10 +631,6 @@ public class SettingsActivity extends SecureActivity {
                         java.io.File[] zips = lucky.listFiles();
                         if (zips != null) for (java.io.File z : zips) if (z.getName().endsWith(".zip")) z.delete();
                     } catch (Throwable ignored) {}
-                    // orders.log（Android/media 隔离区）
-                    deleteRecursive(new java.io.File("/sdcard/Android/media/com.sankuai.meituan.dispatch.crowdsource/LSPilot/Plugin/GetNewTaskData"));
-                    // 模块App自身缓存订单文件
-                    deleteRecursive(new java.io.File("/data/user/0/com.mtqsyqgx.app/cache/lucky_orders"));
                     // 2) su 兜底（root 环境删除受保护路径；无root时sdcard已由上面删掉）
                     execSu("rm -rf " + LOG_DIR);
                     execSu("rm -rf /data/user/0/com.sankuai.meituan.dispatch.crowdsource/cache/lucky_log");
@@ -642,13 +638,7 @@ public class SettingsActivity extends SecureActivity {
                     execSu("rm -rf /sdcard/Android/data/com.sankuai.meituan.dispatch.crowdsource/cache/lucky_log");
                     execSu("rm -rf /storage/emulated/0/Android/data/com.sankuai.meituan.dispatch.crowdsource/cache/lucky_log");
                     execSu("rm -rf /data/local/tmp/mt_logs");
-                    execSu("rm -rf /sdcard/Android/media/com.sankuai.meituan.dispatch.crowdsource/LSPilot/Plugin/GetNewTaskData");
-                    execSu("rm -rf /storage/emulated/0/Android/media/com.sankuai.meituan.dispatch.crowdsource/LSPilot/Plugin/GetNewTaskData");
-                    execSu("rm -rf /data/user/0/com.mtqsyqgx.app/cache/lucky_orders");
-                    execSu("rm -rf /data/data/com.mtqsyqgx.app/cache/lucky_orders");
-                    execSu("rm -f /data/local/tmp/mt_orders.json /data/local/tmp/mt_grab_signal.json /data/local/tmp/mt_module_status.txt");
-                    execSu("rm -f /data/local/tmp/su_write_*.tmp");
-                    execSu("rm -f /data/local/tmp/su_orders_*.tmp");
+                    execSu("rm -f /data/local/tmp/mt_module_status.txt");
                     // 3) 重建日志目录
                     new java.io.File(LOG_DIR).mkdirs();
                     runOnUiThread(new Runnable() { public void run() {
@@ -689,12 +679,10 @@ public class SettingsActivity extends SecureActivity {
                     java.io.File logsDir = new java.io.File(tmp, "logs");
                     cfgDir.mkdirs(); prefsDir.mkdirs(); logsDir.mkdirs();
 
-                    // 3) 收集配置/状态/信号文件（su cp，文件不存在则忽略）
+                    // 3) 收集配置/状态文件（su cp，文件不存在则忽略）
                     execSu("cp -f /data/local/tmp/mt_config.json " + cfgDir.getAbsolutePath() + "/");
                     execSu("cp -f /sdcard/mt_config.json " + cfgDir.getAbsolutePath() + "/");
                     execSu("cp -f /data/local/tmp/mt_module_status.txt " + cfgDir.getAbsolutePath() + "/");
-                    execSu("cp -f /data/local/tmp/mt_orders.json " + cfgDir.getAbsolutePath() + "/");
-                    execSu("cp -f /data/local/tmp/mt_grab_signal.json " + cfgDir.getAbsolutePath() + "/");
                     // 4) 收集日志目录
                     execSu("cp -rf /storage/emulated/0/Download/lucky/log " + logsDir.getAbsolutePath() + "/");
                     execSu("cp -rf /data/local/tmp/mt_logs " + logsDir.getAbsolutePath() + "/");

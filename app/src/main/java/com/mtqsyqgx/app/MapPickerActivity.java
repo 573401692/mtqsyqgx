@@ -461,7 +461,7 @@ public class MapPickerActivity extends SecureActivity {
 
         @JavascriptInterface
         public void onConfirm(double lat, double lng, String address, double range) {
-            // 广播给 FloatingWindowService（显式包名，Android 14+ 隐式广播限制下也能可靠送达）
+            // 广播地图选点结果（显式包名，Android 14+ 隐式广播限制下也能可靠送达）
             Intent resultIntent = new Intent(MAP_PICKER_ACTION);
             resultIntent.setPackage(getPackageName());
             resultIntent.putExtra(RESULT_LAT, lat);

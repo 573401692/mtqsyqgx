@@ -1,21 +1,6 @@
-# ============ Build artifacts ============
 /build
-/app/build
-.gradle/
-**/build/
-
-# ============ Local config & secrets (NEVER commit) ============
-# Real signing key config lives only on the local machine.
+/.gradle
+/local.properties
 keystore.properties
-local.properties
-
-# ============ Separate server project (not part of the Android module) ============
-/bridge-admin/
-
-# ============ IDE / agent / OS junk ============
-.codebuddy/
-.vscode/
 .idea/
-.workbuddy/
-.DS_Store
-*.bak*
+*.iml

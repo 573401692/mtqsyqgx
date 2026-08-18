@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mtqsyqgx.app"
-    android:versionCode="168"
-    android:versionName="1.6.8">
+    android:versionCode="180"
+    android:versionName="1.8.0">
 
     <!-- 网络权限（地图加载、搜索、逆地理编码需要） -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -73,24 +73,6 @@
         <receiver
             android:name=".UpdateInstallReceiver"
             android:exported="false" />
-
-        <!-- 安装 APK 文件 Provider（自实现，免 FileProvider 依赖） -->
-        <provider
-            android:name=".ApkFileProvider"
-            android:authorities="${applicationId}.apkfile"
-            android:exported="false"
-            android:grantUriPermissions="true" />
-
-        <!-- 悬浮窗自动抢单服务 -->
-        <service
-            android:name=".FloatingWindowService"
-            android:exported="false" />
-
-        <!-- 跨进程订单通道：采集器(美团进程)通过 ContentResolver 推送订单，无 su 依赖 -->
-        <provider
-            android:name=".OrdersProvider"
-            android:authorities="com.mtqsyqgx.app.orders"
-            android:exported="true" />
 
         
         <!-- ========== Xposed 模块声明（LSPosed 要求） ========== -->
