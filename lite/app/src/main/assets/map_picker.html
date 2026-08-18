@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>地图选点</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#map{width:100%;height:100%;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;overflow:hidden}
+
+#searchPanel{
+  position:fixed;top:0;left:0;right:0;z-index:1000;
+  background:#111827;
+  padding:var(--sbh,24px) 16px 12px;
+  border-radius:0 0 16px 16px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.4);
+}
+.header-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.header-left{display:flex;align-items:center;gap:8px}
+.header-left .icon{font-size:22px}
+.header-left .title{font-size:17px;font-weight:700;color:#fff}
+.badge{display:inline-block;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:600;letter-spacing:0.3px}
+.badge.pickup{background:rgba(16,185,129,0.2);color:#34D399;border:1px solid rgba(16,185,129,0.3)}
+.badge.delivery{background:rgba(59,130,246,0.2);color:#60A5FA;border:1px solid rgba(59,130,246,0.3)}
+.badge.location{background:rgba(251,191,36,0.2);color:#FBBF24;border:1px solid rgba(251,191,36,0.3)}
+.back-btn{
+  width:36px;height:36px;border:none;border-radius:10px;
+  background:rgba(255,255,255,0.1);color:#fff;font-size:18px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .15s;
+}
+.back-btn:active{background:rgba(255,255,255,0.2)}
+
+.search-row{display:flex;gap:8px;align-items:center}
+#searchInput{
+  flex:1;height:42px;border:none;border-radius:12px;
+  background:rgba(255,255,255,0.08);color:#fff;
+  padding:0 14px;font-size:14px;outline:none;
+  border:1.5px solid rgba(255,255,255,0.06);
+  transition:border-color .2s;
+}
+#searchInput:focus{border-color:rgba(16,185,129,0.5)}
+#searchInput::placeholder{color:rgba(255,255,255,0.3)}
+#searchBtn{
+  height:42px;padding:0 18px;border:none;border-radius:12px;
+  background:linear-gradient(135deg,#10B981,#059669);
+  color:#fff;font-size:14px;font-weight:600;cursor:pointer;
+  white-space:nowrap;box-shadow:0 2px 8px rgba(16,185,129,0.3);
+}
+#searchBtn:active{opacity:.85;transform:scale(0.98)}
+
+#searchResults{
+  max-height:240px;overflow-y:auto;margin-top:8px;
+  background:rgba(31,41,55,0.98);border-radius:12px;display:none;
+  border:1px solid rgba(255,255,255,0.06);
+  box-shadow:0 8px 24px rgba(0,0,0,0.4);
+}
+.sr-item{
+  padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04);
+  cursor:pointer;transition:background .15s;
+}
+.sr-item:last-child{border-bottom:none}
+.sr-item:active{background:rgba(16,185,129,0.12)}
+.sr-item .name{color:#f3f4f6;font-size:13px;font-weight:500}
+.sr-item .sub{color:#6B7280;font-size:11px;margin-top:3px}
+
+#rangeTag{
+  position:fixed;left:50%;transform:translateX(-50%);z-index:999;
+  background:rgba(17,24,39,0.95);color:#D1D5DB;
+  padding:6px 16px;border-radius:16px;font-size:12px;font-weight:500;
+  backdrop-filter:blur(8px);display:none;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 2px 12px rgba(0,0,0,0.3);
+}
+
+#rangePanel{
+  position:fixed;left:16px;right:16px;z-index:1000;
+  background:rgba(17,24,39,0.96);
+  padding:10px 16px;
+  backdrop-filter:blur(12px);
+  display:none;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 4px 16px rgba(0,0,0,0.4);
+  margin-top:8px;
+}
+#rangePanel .range-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;
+}
+#rangePanel .range-label{
+  color:#F9FAFB;font-size:13px;font-weight:600;
+  display:flex;align-items:center;gap:6px;
+}
+#rangePanel .range-label::before{
+  content:'';width:3px;height:14px;border-radius:2px;
+  background:linear-gradient(180deg,#10B981,#059669);
+}
+#rangePanel.delivery .range-label::before{
+  background:linear-gradient(180deg,#60A5FA,#3B82F6);
+}
+#rangePanel .range-val{
+  color:#10B981;font-size:15px;font-weight:700;
+  min-width:50px;text-align:right;white-space:nowrap;
+}
+#rangePanel.delivery .range-val{color:#60A5FA}
+#rangeSlider{
+  width:100%;-webkit-appearance:none;appearance:none;
+  height:6px;border-radius:3px;outline:none;
+  background:rgba(255,255,255,0.12);
+}
+#rangeSlider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:22px;height:22px;border-radius:50%;
+  background:linear-gradient(135deg,#10B981,#059669);
+  border:2px solid #fff;cursor:pointer;
+  box-shadow:0 2px 8px rgba(16,185,129,0.5);
+}
+#rangePanel.delivery #rangeSlider::-webkit-slider-thumb{
+  background:linear-gradient(135deg,#60A5FA,#3B82F6);
+  box-shadow:0 2px 8px rgba(59,130,246,0.5);
+}
+
+#pointCard{
+  position:fixed;bottom:calc(80px + var(--nbh, 16px));left:16px;right:16px;z-index:999;
+  background:rgba(17,24,39,0.96);
+  padding:14px 16px;border-radius:14px;
+  backdrop-filter:blur(12px);display:none;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 4px 20px rgba(0,0,0,0.4);
+}
+#pointCard .lbl{color:#6B7280;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}
+#pointCard .coord{color:#10B981;font-size:14px;font-weight:600;margin:4px 0}
+#pointCard .addr{color:#9CA3AF;font-size:12px;line-height:1.5;max-height:48px;overflow:hidden}
+
+.side-tools{
+  position:fixed;right:14px;bottom:200px;z-index:1000;
+  display:flex;flex-direction:column;gap:8px;
+}
+.tool-btn{
+  width:44px;height:44px;border:none;border-radius:14px;
+  background:rgba(17,24,39,0.94);color:#fff;font-size:18px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 3px 12px rgba(0,0,0,0.4);
+  transition:transform .1s;
+}
+.tool-btn:active{transform:scale(0.9)}
+.tool-btn.locating{animation:pulse-spin .8s linear infinite}
+@keyframes pulse-spin{100%{transform:rotate(360deg)}}
+
+#bottomBar{
+  position:fixed;bottom:0;left:0;right:0;z-index:1000;
+  background:#111827;
+  padding:12px 16px calc(12px + var(--nbh, 16px));
+  display:flex;gap:12px;
+  border-top:1px solid rgba(255,255,255,0.04);
+}
+#cancelBtn{
+  height:48px;padding:0 24px;border:none;border-radius:14px;
+  background:rgba(255,255,255,0.08);color:#9CA3AF;
+  font-size:15px;font-weight:500;cursor:pointer;
+}
+#cancelBtn:active{background:rgba(255,255,255,0.12)}
+#confirmBtn{
+  flex:1;height:48px;border:none;border-radius:14px;
+  background:linear-gradient(135deg,#10B981,#059669);
+  color:#fff;font-size:16px;font-weight:700;cursor:pointer;
+  transition:opacity .2s;box-shadow:0 4px 16px rgba(16,185,129,0.3);
+}
+#confirmBtn:active{opacity:.85}
+#confirmBtn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
+
+#loadingMask{
+  position:fixed;top:0;left:0;right:0;bottom:0;z-index:2000;
+  background:rgba(17,24,39,0.98);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+#loadingMask .ring{
+  width:44px;height:44px;border:3px solid rgba(16,185,129,0.15);
+  border-top-color:#10B981;border-radius:50%;
+  animation:spin .7s linear infinite;margin-bottom:18px;
+}
+@keyframes spin{100%{transform:rotate(360deg)}}
+#loadingMask .txt{color:#D1D5DB;font-size:15px;font-weight:500}
+#loadingMask .sub{color:#6B7280;font-size:12px;margin-top:6px}
+#loadingMask.hide{display:none}
+
+.marker-pin{
+  width:22px;height:22px;border-radius:50% 50% 50% 0;
+  transform:rotate(-45deg);
+  border:3px solid #fff;
+  box-shadow:0 3px 10px rgba(0,0,0,0.5),0 0 0 4px rgba(16,185,129,0.25);
+  display:flex;align-items:center;justify-content:center;
+  opacity:1;
+}
+.marker-pin.pickup{background:#10B981;
+  box-shadow:0 3px 10px rgba(0,0,0,0.5),0 0 0 4px rgba(16,185,129,0.25);}
+.marker-pin.delivery{background:#3B82F6;
+  box-shadow:0 3px 10px rgba(0,0,0,0.5),0 0 0 4px rgba(59,130,246,0.25);}
+.marker-pin.location{background:#F59E0B;
+  box-shadow:0 3px 10px rgba(0,0,0,0.5),0 0 0 4px rgba(245,158,11,0.25);}
+.marker-pin::after{
+  content:'';width:8px;height:8px;background:#fff;border-radius:50%;
+  transform:rotate(45deg);
+}
+.marker-inner{display:none}
+
+.user-loc-dot{
+  width:18px;height:18px;border-radius:50%;
+  background:#4285F4;border:3px solid #fff;
+  box-shadow:0 0 0 2px rgba(66,133,244,0.3),0 2px 8px rgba(0,0,0,0.3);
+}
+.user-loc-ring{
+  position:absolute;top:-8px;left:-8px;
+  width:34px;height:34px;border-radius:50%;
+  background:rgba(66,133,244,0.15);
+  animation:user-loc-pulse 2s ease-out infinite;
+}
+@keyframes user-loc-pulse{
+  0%{transform:scale(0.8);opacity:0.6}
+  100%{transform:scale(1.6);opacity:0}
+}
+
+.toast{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:3000;background:rgba(17,24,39,0.95);color:#fff;
+  padding:12px 24px;border-radius:12px;font-size:14px;font-weight:500;
+  box-shadow:0 4px 20px rgba(0,0,0,0.5);pointer-events:none;
+  animation:fadeInOut 2s forwards;
+}
+@keyframes fadeInOut{
+  0%{opacity:0;transform:translate(-50%,-50%) scale(0.9)}
+  15%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  75%{opacity:1}
+  100%{opacity:0;transform:translate(-50%,-50%) scale(0.95)}
+}
+</style>
+</head>
+<body>
+<div id="loadingMask">
+  <div class="ring"></div>
+  <div class="txt">加载地图中...</div>
+  <div class="sub">首次加载需要几秒钟</div>
+</div>
+
+<div id="map"></div>
+
+<div id="searchPanel">
+  <div class="header-row">
+    <div class="header-left">
+      <span class="icon" id="typeIcon">📦</span>
+      <span class="title" id="titleText">选择取货点</span>
+      <span id="typeBadge" class="badge pickup">取货</span>
+    </div>
+    <button class="back-btn" onclick="cancel()">✕</button>
+  </div>
+  <div class="search-row">
+    <input id="searchInput" type="text" placeholder="搜索地址或地点...">
+    <button id="searchBtn">搜索</button>
+  </div>
+  <div id="searchResults"></div>
+</div>
+
+<div id="rangeTag"></div>
+
+<div id="rangePanel">
+  <div class="range-header">
+    <span class="range-label">筛选范围</span>
+    <span class="range-val" id="rangeVal">3.0 km</span>
+  </div>
+  <input type="range" id="rangeSlider" min="1" max="30" value="30" step="1">
+</div>
+
+<div id="pointCard">
+  <div class="lbl">已选位置</div>
+  <div class="coord" id="selCoord"></div>
+  <div class="addr" id="selAddr"></div>
+</div>
+
+<div class="side-tools">
+  <button class="tool-btn" onclick="map.zoomIn()" title="放大">+</button>
+  <button class="tool-btn" onclick="map.zoomOut()" title="缩小">−</button>
+  <button class="tool-btn" id="locateBtn" onclick="locateMe()" title="定位">📍</button>
+  <button class="tool-btn" onclick="openKeySettings()" title="地图Key设置">⚙</button>
+</div>
+
+<div id="bottomBar">
+  <button id="cancelBtn" onclick="cancel()">取消</button>
+  <button id="confirmBtn" onclick="confirmLocation()" disabled>确认选点</button>
+</div>
+
+<script>
+var P=new URLSearchParams(location.search);
+var type=P.get('type')||'pickup';
+var initLat=parseFloat(P.get('lat'))||0;
+var initLng=parseFloat(P.get('lng'))||0;
+var rangeKm=parseFloat(P.get('range'))||3;
+var gaodeKey=P.get('key')||'';
+var gaodeJscode=P.get('jscode')||'';
+
+// 更新标题和标签
+var rangePanel=document.getElementById('rangePanel');
+if(type==='pickup'){
+  document.getElementById('titleText').textContent='选择取货点';
+  document.getElementById('typeIcon').textContent='📦';
+  document.getElementById('typeBadge').textContent='取货';
+  document.getElementById('typeBadge').className='badge pickup';
+}else if(type==='delivery'){
+  document.getElementById('titleText').textContent='选择送货点';
+  document.getElementById('typeIcon').textContent='🚚';
+  document.getElementById('typeBadge').textContent='送货';
+  document.getElementById('typeBadge').className='badge delivery';
+  rangePanel.classList.add('delivery');
+}else{
+  document.getElementById('titleText').textContent='设置伪装位置';
+  document.getElementById('typeIcon').textContent='📍';
+  document.getElementById('typeBadge').textContent='伪装';
+  document.getElementById('typeBadge').className='badge location';
+  rangePanel.style.display='none';
+}
+
+// 范围滑块：仅pickup/delivery显示
+if(type==='pickup'||type==='delivery'){
+  rangePanel.style.display='block';
+  // 动态定位：贴合搜索面板底部
+  var spH=document.getElementById('searchPanel').offsetHeight;
+  rangePanel.style.top=(spH+12)+'px';
+  var rangeSlider=document.getElementById('rangeSlider');
+  var rangeValEl=document.getElementById('rangeVal');
+  // localStorage存储键
+  var rangeStorageKey='mtq_range_'+type;
+  // 优先从localStorage读取上次范围，否则使用传入值或默认3.0km
+  var savedRange=localStorage.getItem(rangeStorageKey);
+  if(savedRange!==null){
+    rangeKm=parseFloat(savedRange);
+    if(isNaN(rangeKm)||rangeKm<0.1)rangeKm=0.1;
+    if(rangeKm>3.0)rangeKm=3.0;
+  }else if(rangeKm<0.1||rangeKm>3.0){
+    rangeKm=3.0;
+  }
+  // 值映射: slider 1~30 => 0.1~3.0 km (step 0.1)
+  rangeSlider.value=Math.round(rangeKm*10);
+  rangeValEl.textContent=rangeKm.toFixed(1)+' km';
+  rangeSlider.addEventListener('input',function(){
+    rangeKm=parseInt(this.value)/10;
+    if(rangeKm<0.1)rangeKm=0.1;
+    if(rangeKm>3.0)rangeKm=3.0;
+    rangeValEl.textContent=rangeKm.toFixed(1)+' km';
+    // 保存到localStorage
+    localStorage.setItem(rangeStorageKey,rangeKm.toFixed(1));
+    if(selLat&&selLng)updateRange(selLat,selLng);
+  });
+}
+
+// 地图模式：有key用高德JS API，无key用Leaflet
+var useAMap=!!gaodeKey;
+var map=null,amapMap=null;
+var marker=null,rangeCircle=null;
+var userLocMarker=null;
+var _mapReady=false;
+
+function hideLoading(){
+  var m=document.getElementById('loadingMask');
+  if(m&&!m.classList.contains('hide'))m.classList.add('hide');
+}
+
+// ==================== 高德JS API模式 ====================
+function initAMap(){
+  window._AMapSecurityConfig={securityJsCode:gaodeJscode||''};
+  var script=document.createElement('script');
+  script.src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(gaodeKey)
+    +'&plugin=AMap.PlaceSearch,AMap.Geocoder,AMap.AutoComplete,AMap.Geolocation,AMap.CircleEditor';
+  script.onload=function(){
+    if(!window.AMap){useAMap=false;initLeaflet();return;}
+    _mapReady=true;
+    amapMap=new AMap.Map('map',{
+      center:initLat&&initLng?[initLng,initLat]:[116.4074,39.9042],
+      zoom:initLat&&initLng?14:12,
+      viewMode:'2D'
+    });
+    amapMap.on('click',function(e){
+      var lat=Math.round(e.lnglat.getLat()*10000)/10000;
+      var lng=Math.round(e.lnglat.getLng()*10000)/10000;
+      setMarker(lat,lng);
+      reverseGeocode(lat,lng);
+    });
+    amapMap.on('complete',function(){hideLoading();});
+    setTimeout(hideLoading,5000);
+    if(initLat&&initLng){
+      setMarker(initLat,initLng);
+    }else{
+      setTimeout(function(){locateMe();},500);
+    }
+  };
+  script.onerror=function(){useAMap=false;initLeaflet();};
+  document.head.appendChild(script);
+}
+
+// ==================== Leaflet模式 ====================
+function initLeaflet(){
+  var tileUrl=gaodeKey
+    ?'https://wprd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scl=1&style=8&x={x}&y={y}&z={z}'
+    :'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+  map=L.map('map',{
+    center:initLat&&initLng?[initLat,initLng]:[39.9042,116.4074],
+    zoom:initLat&&initLng?14:12,
+    zoomControl:false,
+    attributionControl:false
+  });
+  var mainTile=L.tileLayer(tileUrl,{subdomains:'1234',maxZoom:18});
+  var osmFallback=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19});
+  var tileErrCount=0,_tileReady=false;
+  mainTile.on('tileerror',function(){
+    tileErrCount++;
+    if(tileErrCount>8&&!_tileReady){
+      map.removeLayer(mainTile);osmFallback.addTo(map);_tileReady=true;hideLoading();
+    }
+  });
+  mainTile.on('tileload',function(){_tileReady=true;hideLoading();});
+  mainTile.addTo(map);
+  _mapReady=true;
+  if(gaodeKey){
+    // 加载高德JS API用于搜索和地理编码
+    window._AMapSecurityConfig={securityJsCode:gaodeJscode||''};
+    var s=document.createElement('script');
+    s.src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(gaodeKey)+'&plugin=AMap.PlaceSearch,AMap.Geocoder,AMap.AutoComplete';
+    s.onload=function(){window._gaodeReady=!!window.AMap;};
+    s.onerror=function(){};
+    document.head.appendChild(s);
+  }
+  map.on('click',function(e){
+    var lat=Math.round(e.latlng.lat*10000)/10000;
+    var lng=Math.round(e.latlng.lng*10000)/10000;
+    setMarker(lat,lng);
+    reverseGeocode(lat,lng);
+  });
+  setTimeout(hideLoading,6000);
+  if(initLat&&initLng){
+    setMarker(initLat,initLng);
+  }else{
+    setTimeout(function(){locateMe();},500);
+  }
+}
+
+// 启动
+if(useAMap){initAMap();}else{initLeaflet();}
+
+function showToast(msg){
+  var t=document.createElement('div');
+  t.className='toast';t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(function(){t.remove();},2200);
+}
+
+var selLat=0,selLng=0,selAddr='';
+
+// ==================== 通用地图操作函数 ====================
+function setUserLocMarker(lat,lng){
+  if(useAMap&&amapMap){
+    if(userLocMarker){amapMap.remove(userLocMarker);userLocMarker=null;}
+    userLocMarker=new AMap.CircleMarker({
+      center:[lng,lat],radius:8,
+      strokeColor:'#4285F4',strokeWeight:3,strokeColor:'#fff',
+      fillColor:'#4285F4',fillOpacity:1,
+      zIndex:100
+    });
+    userLocMarker.setMap(amapMap);
+  }else if(map){
+    if(userLocMarker){map.removeLayer(userLocMarker);userLocMarker=null;}
+    var html='<div style="position:relative;width:18px;height:18px;">'
+      +'<div style="position:absolute;top:-8px;left:-8px;width:34px;height:34px;border-radius:50%;background:rgba(66,133,244,0.15);animation:user-loc-pulse 2s ease-out infinite;"></div>'
+      +'<div style="width:18px;height:18px;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 0 0 2px rgba(66,133,244,0.3),0 2px 8px rgba(0,0,0,0.3);position:relative;"></div>'
+      +'</div>';
+    var icon=L.divIcon({className:'',html:html,iconSize:[18,18],iconAnchor:[9,9]});
+    userLocMarker=L.marker([lat,lng],{icon:icon,interactive:false,zIndexOffset:-1000}).addTo(map);
+  }
+}
+
+function setMarker(lat,lng){
+  selLat=lat;selLng=lng;
+  if(useAMap&&amapMap){
+    if(marker){
+      marker.setPosition([lng,lat]);
+    }else{
+      var mHtml='<div style="position:relative;display:inline-block;">'
+        +'<div class="marker-pin '+type+'"></div>'
+        +'<div class="marker-inner '+type+'"></div></div>';
+      marker=new AMap.Marker({
+        position:[lng,lat],
+        content:mHtml,
+        offset:new AMap.Pixel(-11,-30),
+        draggable:true,
+        cursor:'move'
+      });
+      marker.on('dragend',function(e){
+        var p=marker.getPosition();
+        selLat=Math.round(p.getLat()*10000)/10000;
+        selLng=Math.round(p.getLng()*10000)/10000;
+        reverseGeocode(selLat,selLng);
+      });
+      marker.setMap(amapMap);
+    }
+  }else if(map){
+    if(marker){marker.setLatLng([lat,lng]);}
+    else{
+      var html='<div style="position:relative;display:inline-block;">'
+        +'<div class="marker-pin '+type+'"></div>'
+        +'<div class="marker-inner '+type+'"></div></div>';
+      var icon=L.divIcon({
+        className:'',html:html,
+        iconSize:[30,30],iconAnchor:[11,28],popupAnchor:[0,-28]
+      });
+      marker=L.marker([lat,lng],{icon:icon,draggable:true}).addTo(map);
+      marker.on('dragend',function(e){
+        var p=e.target.getLatLng();
+        selLat=Math.round(p.lat*10000)/10000;
+        selLng=Math.round(p.lng*10000)/10000;
+        reverseGeocode(selLat,selLng);
+      });
+    }
+  }
+  updateRange(lat,lng);
+  document.getElementById('confirmBtn').disabled=false;
+  document.getElementById('selCoord').textContent=lat.toFixed(4)+', '+lng.toFixed(4);
+  document.getElementById('pointCard').style.display='block';
+}
+
+function updateRange(lat,lng){
+  if(type!=='pickup'&&type!=='delivery'){
+    if(rangeCircle){
+      if(useAMap&&amapMap)amapMap.remove(rangeCircle);else if(map)map.removeLayer(rangeCircle);
+    }
+    document.getElementById('rangeTag').style.display='none';
+    return;
+  }
+  if(rangeCircle){
+    if(useAMap&&amapMap)amapMap.remove(rangeCircle);else if(map)map.removeLayer(rangeCircle);
+  }
+  var colors={pickup:'#10B981',delivery:'#3B82F6'};
+  var color=colors[type]||'#10B981';
+  if(useAMap&&amapMap){
+    rangeCircle=new AMap.Circle({
+      center:[lng,lat],radius:rangeKm*1000,
+      strokeColor:color,strokeWeight:2,
+      fillColor:color,fillOpacity:0.25
+    });
+    rangeCircle.setMap(amapMap);
+  }else if(map){
+    rangeCircle=L.circle([lat,lng],{
+      radius:rangeKm*1000,color:color,fillColor:color,
+      fillOpacity:0.25,weight:2
+    }).addTo(map);
+  }
+  document.getElementById('rangeTag').textContent='筛选范围: '+rangeKm+' km';
+  var rt=document.getElementById('rangeTag');
+  rt.style.display='block';
+  rt.style.top=(document.getElementById('searchPanel').offsetHeight-30)+'px';
+}
+
+// 逆地理编码：优先用Gaode API，fallback到Nominatim
+function reverseGeocode(lat,lng){
+  if(window.AMap&&gaodeKey){
+    try{
+      var geocoder=new AMap.Geocoder();
+      geocoder.getAddress([lng,lat],function(status,result){
+        if(status==='complete'&&result.regeocode){
+          selAddr=result.regeocode.formattedAddress||'';
+          document.getElementById('selAddr').textContent=selAddr.length>40?selAddr.substring(0,40)+'...':selAddr;
+        }else{
+          fallbackNominatim(lat,lng);
+        }
+      });
+    }catch(e){fallbackNominatim(lat,lng);}
+  }else{
+    fallbackNominatim(lat,lng);
+  }
+}
+
+function fallbackNominatim(lat,lng){
+  fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&accept-language=zh-CN')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      selAddr=d.display_name||'';
+      document.getElementById('selAddr').textContent=selAddr.length>40?selAddr.substring(0,40)+'...':selAddr;
+    }).catch(function(){});
+}
+
+// 搜索：优先Gaode PlaceSearch，fallback Nominatim
+var sTimer=null;
+document.getElementById('searchInput').addEventListener('input',function(e){
+  clearTimeout(sTimer);
+  var q=e.target.value.trim();
+  if(q.length<2){document.getElementById('searchResults').style.display='none';return;}
+  sTimer=setTimeout(function(){doSearch(q);},300);
+});
+document.getElementById('searchBtn').addEventListener('click',function(){
+  var q=document.getElementById('searchInput').value.trim();
+  if(q.length>=2)doSearch(q);
+});
+document.getElementById('searchInput').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){var q=e.target.value.trim();if(q.length>=2)doSearch(q);}
+});
+
+function doSearch(q){
+  var el=document.getElementById('searchResults');
+  el.innerHTML='<div style="padding:14px;color:#6B7280;text-align:center">搜索中...</div>';
+  el.style.display='block';
+
+  // 高德API可用且PlaceSearch插件已加载时，使用高德搜索
+  if(window.AMap&&gaodeKey&&typeof AMap.PlaceSearch==='function'){
+    var gaodeTimeout=setTimeout(function(){
+      // 5秒超时fallback
+      fallbackSearch(q,el);
+    },5000);
+    try{
+      var placeSearch=new AMap.PlaceSearch({pageSize:8});
+      placeSearch.search(q,function(status,result){
+        clearTimeout(gaodeTimeout);
+        if(status==='complete'&&result.poiList&&result.poiList.pois.length){
+          var h='';
+          result.poiList.pois.forEach(function(poi){
+            var n=poi.name.length>30?poi.name.substring(0,30)+'...':poi.name;
+            var sub=poi.address||poi.type||'';
+            h+='<div class="sr-item" onclick="pickSearch('+poi.location.lat+','+poi.location.lng+',\''+(poi.name||'').replace(/'/g,"\\'")+'\')">'
+              +'<div class="name">'+n+'</div>'
+              +'<div class="sub">'+sub+'</div></div>';
+          });
+          el.innerHTML=h;
+        }else{
+          fallbackSearch(q,el);
+        }
+      });
+    }catch(e){
+      clearTimeout(gaodeTimeout);
+      fallbackSearch(q,el);
+    }
+  }else{
+    // 高德不可用，直接Nominatim
+    fallbackSearch(q,el);
+  }
+}
+
+function fallbackSearch(q,el){
+  el.innerHTML='<div style="padding:14px;color:#6B7280;text-align:center">正在使用备用搜索...</div>';
+  var ctrl=null;
+  if(typeof AbortController!=='undefined'){ctrl=new AbortController();setTimeout(function(){ctrl.abort();},8000);}
+  var opts={signal:ctrl?ctrl.signal:undefined};
+  fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q)+'&limit=8&accept-language=zh-CN&addressdetails=1',opts)
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(function(data){
+      if(!data||!data.length){el.innerHTML='<div style="padding:14px;color:#6B7280;text-align:center">未找到结果，请换个关键词试试</div>';return;}
+      var h='';
+      data.forEach(function(item){
+        var n=item.display_name.length>30?item.display_name.substring(0,30)+'...':item.display_name;
+        h+='<div class="sr-item" onclick="pickSearch('+item.lat+','+item.lon+',\''+item.display_name.replace(/'/g,"\\'")+'\')">'
+          +'<div class="name">'+n+'</div>'
+          +'<div class="sub">'+(item.type||'')+'</div></div>';
+      });
+      el.innerHTML=h;
+    }).catch(function(err){
+      var msg=err&&err.name==='AbortError'?'搜索超时，请检查网络连接':'搜索失败，请检查网络';
+      el.innerHTML='<div style="padding:14px;color:#6B7280;text-align:center">'+msg+'</div>';
+    });
+}
+
+function pickSearch(lat,lng,addr){
+  document.getElementById('searchResults').style.display='none';
+  if(useAMap&&amapMap){amapMap.setCenter([lng,lat]);amapMap.setZoom(16);}
+  else if(map){map.setView([lat,lng],16);}
+  setMarker(lat,lng);
+  selAddr=addr;
+  document.getElementById('selAddr').textContent=addr.length>40?addr.substring(0,40)+'...':addr;
+}
+
+// WGS-84 → GCJ-02 坐标转换（高德瓦片使用GCJ-02坐标系，直接使用WGS-84会导致偏移）
+var coordTransform=(function(){
+  var PI=Math.PI,A=6378245.0,EE=0.00669342162296594323;
+  function _ofc(lng,lat){return lng<72.004||lng>137.8347||lat<0.8293||lat>55.8271;}
+  function _dlat(x,y){var r=-100+2*x+3*y+.2*y*y+.1*x*y+.1*Math.sqrt(Math.abs(x));r+=(20*Math.sin(6*x*PI)+20*Math.sin(2*x*PI))*2/3;r+=(20*Math.sin(y*PI)+40*Math.sin(y/3*PI))*2/3;r+=(160*Math.sin(y/12*PI)+320*Math.sin(y*PI/30))*2/3;return r;}
+  function _dlng(x,y){var r=300+x+2*y+.1*x*x+.1*x*y+.1*Math.sqrt(Math.abs(x));r+=(20*Math.sin(6*x*PI)+20*Math.sin(2*x*PI))*2/3;r+=(20*Math.sin(x*PI)+40*Math.sin(x/3*PI))*2/3;r+=(150*Math.sin(x/12*PI)+300*Math.sin(x/30*PI))*2/3;return r;}
+  return function(lat,lng){
+    if(_ofc(lng,lat))return[lat,lng];
+    var dLat=_dlat(lng-105,lat-35),dLng=_dlng(lng-105,lat-35);
+    var radLat=lat/180*PI,mag=Math.sin(radLat);mag=1-EE*mag*mag;var sq=Math.sqrt(mag);
+    dLat=(dLat*180)/((A*(1-EE))/(mag*sq)*PI);
+    dLng=(dLng*180)/(A/sq*Math.cos(radLat)*PI);
+    return[lat+dLat,lng+dLng];
+  };
+})();
+
+function locateMe(){
+  var btn=document.getElementById('locateBtn');
+  btn.classList.add('locating');
+  if(!navigator.geolocation){btn.classList.remove('locating');showToast('设备不支持定位');return;}
+  navigator.geolocation.getCurrentPosition(function(p){
+    btn.classList.remove('locating');
+    var converted=coordTransform(p.coords.latitude,p.coords.longitude);
+    var lat=Math.round(converted[0]*10000)/10000;
+    var lng=Math.round(converted[1]*10000)/10000;
+    if(useAMap&&amapMap){amapMap.setCenter([lng,lat]);amapMap.setZoom(16);}
+    else if(map){map.setView([lat,lng],16);}
+    setUserLocMarker(lat,lng);
+    setMarker(lat,lng);
+    reverseGeocode(lat,lng);
+    showToast('已定位到当前位置');
+  },function(){
+    btn.classList.remove('locating');
+    showToast('定位失败，请检查权限');
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:5000});
+}
+
+function confirmLocation(){
+  if(!selLat||!selLng){showToast('请先选择位置');return;}
+  var range=(type==='pickup'||type==='delivery')?rangeKm:0;
+  if(window.AndroidBridge&&window.AndroidBridge.onConfirm)
+    window.AndroidBridge.onConfirm(selLat,selLng,selAddr,range);
+}
+function openKeySettings(){
+  if(window.AndroidBridge&&window.AndroidBridge.showKeySettings)
+    window.AndroidBridge.showKeySettings();
+}
+function cancel(){
+  if(window.AndroidBridge&&window.AndroidBridge.onConfirm)
+    window.AndroidBridge.onConfirm(0,0,'',0);
+  else history.back();
+}
+</script>
+</body>
+</html>
