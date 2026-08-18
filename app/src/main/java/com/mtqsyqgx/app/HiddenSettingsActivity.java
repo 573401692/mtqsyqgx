@@ -29,7 +29,6 @@ public class HiddenSettingsActivity extends SecureActivity {
     private static final String CONFIG_PREFS = "config";
     private static final String KEY_HIDDEN_ENTRY_ENABLED = "hidden_entry_enabled";
     private static final String KEY_LOCATION_SPOOF = "show_location_spoof";
-    private static final String KEY_AUTO_GRAB_FLOAT = "auto_grab_float";
 
     // UI颜色
     private static final int COLOR_BG = Color.parseColor("#F4F6F9");
@@ -147,17 +146,6 @@ public class HiddenSettingsActivity extends SecureActivity {
                 new android.widget.CompoundButton.OnCheckedChangeListener() {
                     public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
                         configPrefs.edit().putBoolean(KEY_LOCATION_SPOOF, isChecked).apply();
-                    }
-                }));
-
-        funcContent.addView(createDivider());
-
-        // 自动抢单悬浮窗开关
-        funcContent.addView(createSwitchRow("自动抢单悬浮窗", "开启后显示自动抢单悬浮窗控制面板",
-                configPrefs.getBoolean(KEY_AUTO_GRAB_FLOAT, false),
-                new android.widget.CompoundButton.OnCheckedChangeListener() {
-                    public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
-                        configPrefs.edit().putBoolean(KEY_AUTO_GRAB_FLOAT, isChecked).apply();
                     }
                 }));
 

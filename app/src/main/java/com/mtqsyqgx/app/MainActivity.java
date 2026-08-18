@@ -41,12 +41,12 @@ public class MainActivity extends SecureActivity {
 
     private static final String[][] APP_KEYS = {
         {"mt_update", "mt_watermark", "mt_screenshot", "mt_anti_detect", "mt_online_check", "mt_dev_options",
-            "mt_time_offset", "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_skip_grab_confirm"}
+            "mt_time_offset", "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock"}
     };
 
     private static final String[] ALL_KEYS = {"mt_update", "mt_watermark", "mt_screenshot", "mt_anti_detect",
         "mt_online_check", "mt_dev_options", "mt_time_offset",
-        "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_skip_grab_confirm", "mt_location_spoof",
+        "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_location_spoof",
         "location_lat", "location_lng"};
 
     private static final String[] TARGET_PACKAGES = {"com.sankuai.meituan.dispatch.crowdsource"};
@@ -731,7 +731,6 @@ public class MainActivity extends SecureActivity {
         boolean showLocationSpoof = configPrefs.getBoolean("show_location_spoof", false);
         // mt_location_spoof: 快捷操作中的模拟定位 toggle，控制实际 hook 行为（写入 mt_config.json）
         boolean locationSpoofActive = prefs.getBoolean("mt_location_spoof", false);
-        boolean autoGrabFloatEnabled = configPrefs.getBoolean("auto_grab_float", false);
 
         if (showLocationSpoof) {
             addSwitchRow(content, "模拟定位", "开启/关闭模拟定位功能（同时联动反模拟位置检测）", locationSpoofActive,
@@ -761,14 +760,7 @@ public class MainActivity extends SecureActivity {
                 });
         }
 
-        if (autoGrabFloatEnabled) {
-            addActionRow(content, "打开自动抢单悬浮窗", "启动抢单监控服务", COLOR_GREEN,
-                new View.OnClickListener() {
-                    public void onClick(View v) { openFloatingWindow(); }
-                });
-        }
-
-        if (!showLocationSpoof && !autoGrabFloatEnabled) {
+        if (!showLocationSpoof) {
             TextView hint = new TextView(this);
             hint.setText("隐藏的小功能需要特定办法才能解锁哦");
             hint.setTextSize(14);
@@ -866,7 +858,7 @@ public class MainActivity extends SecureActivity {
         SharedPreferences cp = getSharedPreferences("config", MODE_PRIVATE);
         StringBuilder sb = new StringBuilder("[" + ts + "] 应用启动，功能开关基线: ");
         String[] keys = {"mt_location_spoof", "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock",
-                "mt_online_check", "mt_skip_grab_confirm", "auto_grab_float", "show_location_spoof",
+                "mt_online_check", "show_location_spoof",
                 "mt_auto_refresh_delay", "mt_dev_options"};
         for (int i = 0; i < keys.length; i++) {
             try {
@@ -1150,7 +1142,6 @@ public class MainActivity extends SecureActivity {
 
             case "mt_auto_refresh_home": return "自动刷新主页";
             case "mt_anti_mock": return "反模拟位置检测";
-            case "mt_skip_grab_confirm": return "跳过二次抢单确认";
             case "mt_location_spoof": return "模拟定位";
             default: return key;
         }
@@ -1228,7 +1219,7 @@ public class MainActivity extends SecureActivity {
                 synchronized (MainActivity.this) { saveQueued = false; }
                 try {
                     int delayVal = finalDelayVal;
-                    // 合并已有配置，保留 FloatingWindowService 写入的键
+                    // 合并已有配置，保留浮窗写入的键
                     JSONObject config = loadExistingConfig();
                     if (config == null) config = new JSONObject();
                     for (String[] g : APP_KEYS) {
@@ -1351,13 +1342,7 @@ public class MainActivity extends SecureActivity {
         try { if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) return false; } catch (Throwable t) { return false; }
         try { if (!checkInstallPermission()) return false; } catch (Throwable t) { return false; }
         try { if (checkSelfPermission(android.Manifest.permission.INTERNET) != android.content.pm.PackageManager.PERMISSION_GRANTED) return false; } catch (Throwable t) { return false; }
-        try { if (hasFloatingWindow() && !android.provider.Settings.canDrawOverlays(this)) return false; } catch (Throwable t) { return false; }
         return true;
-    }
-
-    /** 是否完整版（含悬浮窗） */
-    private boolean hasFloatingWindow() {
-        try { Class.forName("com.mtqsyqgx.app.FloatingWindowService"); return true; } catch (Throwable t) { return false; }
     }
 
     /** 进入主页面前的权限检测申请页（全屏） */
@@ -1755,42 +1740,6 @@ public class MainActivity extends SecureActivity {
         v.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp2px(1)) {{ setMargins(dp2px(16), 0, dp2px(16), 0); }});
         v.setBackgroundColor(Color.parseColor("#F2F4F4"));
         return v;
-    }
-
-    private void openFloatingWindow() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
-            final Dialog d = new Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
-            LinearLayout root = new LinearLayout(this);
-            root.setOrientation(LinearLayout.VERTICAL);
-            root.setGravity(Gravity.CENTER);
-            root.setBackgroundColor(Color.parseColor("#B3000000"));
-            root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            LinearLayout card = createDialogCard(0.82f);
-            addIconText(card, "\uD83D\uDD14", 36);
-            addTitle(card, "需要悬浮窗权限", COLOR_PRIMARY);
-            addMessage(card, "自动抢单悬浮窗需要「显示在其他应用上层」权限，请在接下来的系统设置中开启。", 14);
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setPadding(0, dp2px(8), 0, 0);
-            addButton(row, "取消", Color.parseColor("#555555"), new View.OnClickListener() {
-                public void onClick(View v) { d.dismiss(); }
-            }, false);
-            addButton(row, "去开启", COLOR_PRIMARY, new View.OnClickListener() {
-                public void onClick(View v) {
-                    d.dismiss();
-                    Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                }
-            }, false);
-            card.addView(row);
-            root.addView(card);
-            d.setContentView(root);
-            d.setCancelable(true);
-            d.show();
-            return;
-        }
-        startService(new Intent(this, FloatingWindowService.class));
     }
 
     private Button createStyledButton(String text, int bg) {
