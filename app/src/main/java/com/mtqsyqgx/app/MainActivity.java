@@ -691,12 +691,32 @@ public class MainActivity extends SecureActivity {
                 if (!hasFocus) {
                     int val = 1000;
                     try { val = Integer.parseInt(etDelay.getText().toString().trim()); } catch (Exception ignored) {}
-                    if (val < 500) val = 500;      // 最小 500ms，防止空值/0 导致疯狂刷新
-                    if (val > 10000) val = 10000;
+                    if (val <= 0) val = 50;       // 仅防止无效值，不限制用户输入范围
                     etDelay.setText(String.valueOf(val));
                     prefs.edit().putInt("mt_auto_refresh_delay", val).apply();
                     autoSaveConfig();
                 }
+            }
+        });
+        // ★ 输入即保存（防抖 800ms）：不依赖失焦，改完即可生效
+        etDelay.addTextChangedListener(new android.text.TextWatcher() {
+            private final android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            private Runnable saveTask;
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                if (saveTask != null) h.removeCallbacks(saveTask);
+                saveTask = () -> {
+                    try {
+                        String ds = etDelay.getText().toString().trim();
+                        if (ds.isEmpty()) return;
+                        int d = Integer.parseInt(ds);
+                        if (d <= 0) d = 50;
+                        prefs.edit().putInt("mt_auto_refresh_delay", d).apply();
+                        autoSaveConfig();
+                    } catch (Exception ignored) {}
+                };
+                h.postDelayed(saveTask, 800);
             }
         });
         inputRow.addView(etDelay, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
@@ -710,7 +730,7 @@ public class MainActivity extends SecureActivity {
         content.addView(inputRow);
 
         TextView delayHint = new TextView(this);
-        delayHint.setText("建议值: 1000(每秒) / 2000 / 3000 / 5000\n与自动抢单悬浮窗的刷新间隔共用同一数据，任一处修改两处同步生效");
+        delayHint.setText("建议值: 1000(每秒) / 2000 / 3000 / 5000\n可输入任意毫秒值，失焦或修改后自动保存");
         delayHint.setTextSize(11);
         delayHint.setTextColor(COLOR_TEXT_SUB);
         delayHint.setLineSpacing(2, 1.2f);
@@ -1158,7 +1178,6 @@ public class MainActivity extends SecureActivity {
     private volatile boolean saveQueued = false;
 
     private void autoSaveConfig() {
-        // ★ 在 UI 线程捕获延时值，避免后台线程跨线程读 EditText
         int capDelayVal;
         try { capDelayVal = prefs.getInt("mt_auto_refresh_delay", 0); }
         catch (ClassCastException e) { capDelayVal = Integer.parseInt(prefs.getString("mt_auto_refresh_delay", "0")); }
@@ -1166,18 +1185,15 @@ public class MainActivity extends SecureActivity {
             try {
                 String ds = etDelay.getText().toString().trim();
                 int d = Integer.parseInt(ds);
-                if (d < 500) d = 500;   // 最小 500ms，防止 0/空值导致 HookInit 按 500ms 疯狂刷新
-                if (d > 10000) d = 10000;
+                if (d <= 0) d = 50;    // 仅防止无效值，不限制用户输入范围
                 capDelayVal = d;
                 prefs.edit().putInt("mt_auto_refresh_delay", capDelayVal).apply();
             } catch (Exception e) { /* 保留 prefs 中的默认值 */ }
         }
-        final int finalDelayVal = capDelayVal;
-
-        // ★ 单线程串行 + 合并：快速连点不会并发写、不会旧快照覆盖新状态
-        //   （任务真正执行时会重新读取最新 prefs，故只需保证不堆积重复任务）
+        // ★ prefs 已在 UI 线程写入最新值；任务执行时从 prefs 读取，
+        //   即使被 saveQueued 合并跳过，排队任务也会写到最新延迟值（不丢修改）
         synchronized (this) {
-            if (saveQueued) return; // 已有待执行任务，它执行时会读到最新开关状态
+            if (saveQueued) return; // 已有待执行任务，它执行时会读到最新 prefs
             saveQueued = true;
         }
         configSaver.execute(new Runnable() {
@@ -1226,7 +1242,11 @@ public class MainActivity extends SecureActivity {
             public void run() {
                 synchronized (MainActivity.this) { saveQueued = false; }
                 try {
-                    int delayVal = finalDelayVal;
+                    // ★ 任务执行时从 prefs 读最新延迟值（UI 线程已写入），避免 saveQueued 合并导致旧值覆盖
+                    int delayVal;
+                    try { delayVal = prefs.getInt("mt_auto_refresh_delay", 1000); }
+                    catch (ClassCastException e) { delayVal = Integer.parseInt(prefs.getString("mt_auto_refresh_delay", "1000")); }
+                    if (delayVal <= 0) delayVal = 50;
                     // 合并已有配置，保留浮窗写入的键
                     JSONObject config = loadExistingConfig();
                     if (config == null) config = new JSONObject();
