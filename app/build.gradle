@@ -9,8 +9,8 @@ android {
         applicationId "com.mtqsyqgx.app"
         minSdkVersion 30
         targetSdkVersion 35
-        versionCode 181
-        versionName "1.8.1"
+        versionCode 182
+        versionName "1.8.2"
     }
 
     signingConfigs {

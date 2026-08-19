@@ -471,7 +471,7 @@ public class HookInit extends XposedModule {
             // 创建默认配置，启用所有核心功能
             JSONObject def = new JSONObject();
             def.put("mt_location_spoof", true);    // 位置模拟
-            def.put("mt_anti_mock", true);          // 反模拟检测
+            def.put("mt_anti_mock", true);          // 去除模拟检测
             def.put("mt_watermark", true);          // 去水印
             def.put("mt_screenshot", true);         // 允许截屏
             def.put("mt_update", true);             // 阻止更新
@@ -480,10 +480,11 @@ public class HookInit extends XposedModule {
             def.put("mt_hide_speed", true);         // 禁止超速检测
             def.put("mt_time_offset", false);       // 时间偏移（默认关）
             def.put("mt_online_check", true);       // 下线查看完整地址
-            def.put("mt_green_light", true);        // 锁定绿灯（红绿灯显示+上报锁定为绿灯/60s）
+            def.put("mt_green_light", true);        // 锁定去除红绿灯检测（红绿灯显示+上报锁定为绿灯/60s）
             def.put("mt_dev_options", false);       // 开发者选项（默认关）
             def.put("mt_auto_refresh_delay", 1000); // 自动刷新主页间隔(ms)
             def.put("mt_skip_grab_confirm", false); // 跳过二次抢单确认（默认关）
+            def.put("mt_env_guard", true);          // 去除异常环境检测（实验性，默认开）
             def.put("location_lat", 22.533864);     // 默认坐标（深圳）
             def.put("location_lng", 113.930291);
             def.put("location_speed", 0.0);         // 默认速度0
@@ -1656,7 +1657,10 @@ public class HookInit extends XposedModule {
         try { Class<?> fm = cl.loadClass("com.meituan.android.common.fingerprint.FingerprintManager"); hook(fm.getDeclaredMethod("detection", cl.loadClass("android.content.Context"))).intercept(c -> ""); L("[反检测] detection ✓"); logFeature("反检测", true, "detection"); } catch (Throwable t) { Le("反检测 detection", t); logFeature("反检测", false, t.getMessage()); }
         try { Class<?> fm = cl.loadClass("com.meituan.android.common.fingerprint.FingerprintManager"); for (Method m : fm.getDeclaredMethods()) { if ("root".equals(m.getName()) && m.getParameterTypes().length == 0 && m.getReturnType() == int.class) { hook(m).intercept(c -> 0); L("[反检测] root ✓"); break; } } } catch (Throwable t) { Le("反检测 root", t); }
 
-        // ═══ 锁定绿灯（mt_green_light：红绿灯数据拦截锁定，显示+上报全部锁定为绿灯/60s） ═══
+        // ═══ 8b. 去除异常环境检测（mt_env_guard，实验性：MTGuard 风控 SDK 全量"安全值"） ═══
+        installEnvGuard(cl);
+
+        // ═══ 锁定去除红绿灯检测（mt_green_light：红绿灯数据拦截锁定，显示+上报全部锁定为绿灯/60s） ═══
         // 颜色语义：TBT/Safety 层 1=红 2=黄 3=绿；SDK 显示层 201=红 202=黄 203=绿
         if (p("mt_green_light", false)) {
             // 1. 显示链路：ConvertUtils.naviTrafficCountDownListTbtToSdk（地图气泡：红→绿，倒计时=60）
@@ -1756,7 +1760,55 @@ public class HookInit extends XposedModule {
                     if (!hooked) L("[绿灯] 上报网络层方法未找到");
                 }
             } catch (Throwable t) { Le("[绿灯] 上报网络层异常", t); }
-            logFeature("锁定绿灯", true, "显示+上报四层锁定（绿灯/60s）");
+
+            // 5. 源头阻断：Navigator.startNaviSafetyService（不启动导航安全服务 → 红绿灯数据无从产生）
+            try {
+                Class<?> navClass = findClassOrNull(cl, "com.meituan.sankuai.navisdk.api.inside.Navigator");
+                if (navClass != null) {
+                    int hk = 0;
+                    for (Method m : navClass.getDeclaredMethods()) {
+                        if (!"startNaviSafetyService".equals(m.getName())) continue;
+                        try {
+                            hook(m).intercept(chain -> blockReturn(chain));
+                            hk++;
+                        } catch (Throwable ig) {}
+                    }
+                    L("[绿灯] ✓ 源头阻断: Navigator.startNaviSafetyService（" + hk + "）");
+                } else { L("[绿灯] 未找到 Navigator"); }
+            } catch (Throwable t) { Le("[绿灯] Navigator 阻断异常", t); }
+
+            // 6. 上报阻断：matrix/report SafetyStrategyReport（安全策略上报，直接阻断）
+            String[] ssrClasses = new String[]{
+                    "com.meituan.banma.matrix.trafficsafety.SafetyStrategyReport",
+                    "com.meituan.banma.trafficsafety.report.SafetyStrategyReport"};
+            for (String ssr : ssrClasses) {
+                Class<?> ssrClass = findClassOrNull(cl, ssr);
+                if (ssrClass != null) {
+                    int hookedCnt = 0;
+                    for (Method m : ssrClass.getDeclaredMethods()) {
+                        if (!"a".equals(m.getName())) continue;
+                        try { hook(m).intercept(chain -> blockReturn(chain)); hookedCnt++; } catch (Throwable ig) {}
+                    }
+                    L("[绿灯] ✓ 上报阻断: " + ssr + "（" + hookedCnt + " 个 a()）");
+                } else { L("[绿灯] 未找到 " + ssr); }
+            }
+
+            // 7. IoT/Link 上报阻断：matrix.base.link 上报链路（IotReportThread 线程 / LinkReporter）
+            try {
+                Class<?> linkHandler = findClassOrNull(cl, "com.meituan.banma.matrix.base.link.handler.c");
+                if (linkHandler != null) {
+                    int hk = 0;
+                    for (Method m : linkHandler.getDeclaredMethods()) {
+                        String mn = m.getName();
+                        if ("safetyDataReport".equals(mn) || "safetyDataReportSync".equals(mn)) {
+                            try { hook(m).intercept(chain -> blockReturn(chain)); hk++; } catch (Throwable ig) {}
+                        }
+                    }
+                    L("[绿灯] ✓ IoT阻断: matrix.link.handler.c safetyDataReport（" + hk + "）");
+                } else { L("[绿灯] 未找到 matrix.link.handler.c"); }
+            } catch (Throwable t) { Le("[绿灯] IoT/Link 阻断异常", t); }
+
+            logFeature("锁定去除红绿灯检测", true, "显示+上报四层锁定+源头/IoT阻断（绿灯/60s）");
         }
 
         // ═══ 9. 跳过二次抢单确认（NoConfirmDialogs） ═══
@@ -2025,6 +2077,141 @@ public class HookInit extends XposedModule {
         L("[NoConfirmDialogs] 插件加载完成");
     }
 
+    // ═══════════ 去除异常环境检测（mt_env_guard，实验性） ═══════════
+    // 美团系 App 统一走 MTGuard 风控 SDK 做环境检测，检测结果被用于
+    //   RootDetectionProcessor.getIsRoot()/getHasMalWare()、EmulatorDetectionProcessor.getIsEmulator()、
+    //   ApiIsJailBreak、埋点/分析上报、登录/抢单/审核风控判定。
+    // 这里把所有检测方法 Hook 成"安全值"，从根源抹掉
+    //   root / 模拟器 / hook / 调试 / 代理 / 虚拟定位 / 恶意软件 等异常标记。
+    // ★ 实验性：类名/方法名基于当前美团版本，版本变动时失败不影响其他功能。
+    private void installEnvGuard(ClassLoader cl) {
+        if (!p("mt_env_guard", true)) {
+            L("[去除异常环境检测] 未启用，跳过（实验性）");
+            logFeature("去除异常环境检测", false, "未启用(开关关)");
+            return;
+        }
+        L("[去除异常环境检测] >>> 安装（实验性）");
+
+        // 1. MTGuard：布尔检测 → false；签名校验 → true；内存检测 → 0；无障碍信息 → ""
+        String[] guardBools = {"isRoot", "isEmu", "hasMalware", "isHook", "isDebug", "isProxy",
+                "isproxyDetect", "isVirtualLocation", "isRemoteCall", "isCameraHack", "isDarkSystem",
+                "isAccessibilityEnable", "inSandBox", "isrootDetect", "issimulatorDetect"};
+        Class<?> guard = findClassOrNull(cl, "com.meituan.android.common.mtguard.MTGuard");
+        if (guard != null) {
+            int boolOk = 0;
+            for (Method m : guard.getDeclaredMethods()) {
+                if (m.getParameterTypes().length != 0) continue; // 只拦无参检测方法
+                String mn = m.getName();
+                try {
+                    if (containsName(guardBools, mn)) { hook(m).intercept(c -> false); boolOk++; }
+                    else if ("isSigCheckOK".equals(mn)) { hook(m).intercept(c -> true); L("[去除异常环境检测] MTGuard.isSigCheckOK → true ✓"); }
+                    else if ("isunsafeMemoryDetect".equals(mn)) { hook(m).intercept(c -> 0); L("[去除异常环境检测] MTGuard.isunsafeMemoryDetect → 0 ✓"); }
+                    else if ("getAccessibilityInfos".equals(mn)) { hook(m).intercept(c -> ""); L("[去除异常环境检测] MTGuard.getAccessibilityInfos → \"\" ✓"); }
+                } catch (Throwable ig) {}
+            }
+            L("[去除异常环境检测] MTGuard 布尔检测 → false（" + boolOk + " 项）");
+        } else {
+            L("[去除异常环境检测] MTGuard 类未找到");
+        }
+
+        // 2. RootDetectionProcessor：getIsRoot/getHasMalWare → 0
+        Class<?> rootProc = findClassOrNull(cl, "com.meituan.android.common.rootdetection.RootDetectionProcessor");
+        if (rootProc != null) {
+            for (Method m : rootProc.getDeclaredMethods()) {
+                if (m.getParameterTypes().length != 0) continue;
+                try {
+                    if ("getIsRoot".equals(m.getName()) || "getHasMalWare".equals(m.getName())) hook(m).intercept(c -> 0);
+                } catch (Throwable ig) {}
+            }
+            L("[去除异常环境检测] RootDetectionProcessor 已拦截 (getIsRoot=0, getHasMalWare=0) ✓");
+        } else { L("[去除异常环境检测] RootDetectionProcessor 类未找到"); }
+
+        // 3. EmulatorDetectionProcessor：getIsEmulator → 0，getEmulatorInfo → ""
+        Class<?> emuProc = findClassOrNull(cl, "com.meituan.android.common.emulatordetection.EmulatorDetectionProcessor");
+        if (emuProc != null) {
+            for (Method m : emuProc.getDeclaredMethods()) {
+                if (m.getParameterTypes().length != 0) continue;
+                try {
+                    if ("getIsEmulator".equals(m.getName())) hook(m).intercept(c -> 0);
+                    else if ("getEmulatorInfo".equals(m.getName())) hook(m).intercept(c -> "");
+                } catch (Throwable ig) {}
+            }
+            L("[去除异常环境检测] EmulatorDetectionProcessor 已拦截 (getIsEmulator=0, getEmulatorInfo=\"\") ✓");
+        } else { L("[去除异常环境检测] EmulatorDetectionProcessor 类未找到"); }
+
+        // 4. FingerprintManager.isInstalledApp → false（xposed/越狱工具安装包扫描无效）
+        try {
+            Class<?> fp = findClassOrNull(cl, "com.meituan.android.common.fingerprint.FingerprintManager");
+            if (fp != null) {
+                for (Method m : fp.getDeclaredMethods()) {
+                    if ("isInstalledApp".equals(m.getName()) && m.getParameterTypes().length == 0) {
+                        hook(m).intercept(c -> false);
+                        L("[去除异常环境检测] FingerprintManager.isInstalledApp ✓");
+                        break;
+                    }
+                }
+            }
+        } catch (Throwable t) { Le("[去除异常环境检测] FingerprintManager", t); }
+
+        // 5. hook_scan.a（App 自研系统 API Hook 检测）：无参 a~i → false
+        Class<?> hsA = findClassOrNull(cl, "com.meituan.banma.hook_scan.a");
+        if (hsA != null) {
+            String[] hsMethods = {"a", "b", "c", "d", "e", "f", "g", "h", "i"};
+            int hsOk = 0;
+            for (String n : hsMethods) {
+                for (Method m : hsA.getDeclaredMethods()) {
+                    if (m.getName().equals(n) && m.getParameterTypes().length == 0) {
+                        try { hook(m).intercept(c -> false); hsOk++; } catch (Throwable ig) {}
+                    }
+                }
+            }
+            L("[去除异常环境检测] hook_scan.a 无参检测 → false（" + hsOk + " 项）");
+        } else { L("[去除异常环境检测] hook_scan.a 类未找到"); }
+
+        // 6. hacker.b（hook_scan.b 接口实现）：b~f → false
+        Class<?> hkb = findClassOrNull(cl, "com.meituan.banma.hacker.b");
+        if (hkb != null) {
+            String[] hkbMethods = {"b", "c", "d", "e", "f"};
+            int hkbOk = 0;
+            for (String n : hkbMethods) {
+                for (Method m : hkb.getDeclaredMethods()) {
+                    if (m.getName().equals(n) && m.getParameterTypes().length == 0) {
+                        try { hook(m).intercept(c -> false); hkbOk++; } catch (Throwable ig) {}
+                    }
+                }
+            }
+            L("[去除异常环境检测] hacker.b → false（" + hkbOk + " 项）");
+        } else { L("[去除异常环境检测] hacker.b 类未找到"); }
+
+        L("[去除异常环境检测] 安装完成（实验性：类名/方法名随美团版本可能变动）");
+        logFeature("去除异常环境检测", true, "MTGuard+Root/Emu/Fingerprint/hook_scan（实验性）");
+    }
+
+    /** 数组包含判断（辅助 installEnvGuard） */
+    private boolean containsName(String[] arr, String s) {
+        for (String a : arr) if (a.equals(s)) return true;
+        return false;
+    }
+
+    /** ★ 阻断辅助：按被 hook 方法的返回类型返回安全值（void→null，boolean→false，int→0，其他→null），避免 null 强转 NPE */
+    private Object blockReturn(io.github.libxposed.api.XposedInterface.Chain chain) {
+        try {
+            Class<?> rt = chain.getExecutable() instanceof java.lang.reflect.Method
+                    ? ((java.lang.reflect.Method) chain.getExecutable()).getReturnType() : null;
+            if (rt != null) {
+                if (rt == boolean.class) return Boolean.FALSE;
+                if (rt == int.class) return Integer.valueOf(0);
+                if (rt == long.class) return Long.valueOf(0L);
+                if (rt == float.class) return Float.valueOf(0f);
+                if (rt == double.class) return Double.valueOf(0d);
+                if (rt == short.class) return Short.valueOf((short) 0);
+                if (rt == byte.class) return Byte.valueOf((byte) 0);
+                if (rt == char.class) return Character.valueOf((char) 0);
+            }
+        } catch (Throwable ig) {}
+        return null; // void 或引用类型 → null
+    }
+
     /** ★ 锁定绿灯辅助：SDK 显示层红绿灯对象（红201→绿203，倒计时→60） */
     private void fixSdkLight(Object info) {
         if (info == null) return;
@@ -2037,7 +2224,7 @@ public class HookInit extends XposedModule {
         try { callAnyMethod(info, "setCountdown", 60); } catch (Throwable ig) {}
     }
 
-    /** ★ 锁定绿灯辅助：Safety 层红绿灯对象（public color/downCount 字段，3=绿，倒计时=60） */
+    /** ★ 锁定去除红绿灯检测辅助：Safety 层红绿灯对象（public color/downCount 字段，3=绿，倒计时=60） */
     private void fixSafetyLight(Object info) {
         if (info == null) return;
         try { Field f = findFieldUp(info.getClass(), "color"); if (f != null) f.setInt(info, 3); } catch (Throwable ig) {}

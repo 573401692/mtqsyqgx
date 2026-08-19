@@ -42,13 +42,14 @@ public class MainActivity extends SecureActivity {
 
     private static final String[][] APP_KEYS = {
         {"mt_update", "mt_watermark", "mt_screenshot", "mt_anti_detect", "mt_online_check", "mt_dev_options",
-            "mt_time_offset", "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_skip_grab_confirm", "mt_green_light"}
+            "mt_time_offset", "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_skip_grab_confirm", "mt_green_light",
+            "mt_env_guard"}
     };
 
     private static final String[] ALL_KEYS = {"mt_update", "mt_watermark", "mt_screenshot", "mt_anti_detect",
         "mt_online_check", "mt_dev_options", "mt_time_offset",
         "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_location_spoof", "mt_skip_grab_confirm",
-        "mt_green_light",
+        "mt_green_light", "mt_env_guard",
         "location_lat", "location_lng"};
 
     private static final String[] TARGET_PACKAGES = {"com.sankuai.meituan.dispatch.crowdsource"};
@@ -688,10 +689,11 @@ public class MainActivity extends SecureActivity {
         etDelay.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             public void onFocusChange(View v, boolean hasFocus) {
                 if (!hasFocus) {
-                    int val = 0;
+                    int val = 1000;
                     try { val = Integer.parseInt(etDelay.getText().toString().trim()); } catch (Exception ignored) {}
-                    if (val < 0) val = 0;
+                    if (val < 500) val = 500;      // 最小 500ms，防止空值/0 导致疯狂刷新
                     if (val > 10000) val = 10000;
+                    etDelay.setText(String.valueOf(val));
                     prefs.edit().putInt("mt_auto_refresh_delay", val).apply();
                     autoSaveConfig();
                 }
@@ -708,7 +710,7 @@ public class MainActivity extends SecureActivity {
         content.addView(inputRow);
 
         TextView delayHint = new TextView(this);
-        delayHint.setText("建议值: 1000(每秒) / 2000 / 3000 / 5000\n设置后自动保存，无需手动操作");
+        delayHint.setText("建议值: 1000(每秒) / 2000 / 3000 / 5000\n与自动抢单悬浮窗的刷新间隔共用同一数据，任一处修改两处同步生效");
         delayHint.setTextSize(11);
         delayHint.setTextColor(COLOR_TEXT_SUB);
         delayHint.setLineSpacing(2, 1.2f);
@@ -735,7 +737,7 @@ public class MainActivity extends SecureActivity {
         boolean locationSpoofActive = prefs.getBoolean("mt_location_spoof", false);
 
         if (showLocationSpoof) {
-            addSwitchRow(content, "模拟定位", "开启/关闭模拟定位功能（同时联动反模拟位置检测）", locationSpoofActive,
+            addSwitchRow(content, "模拟定位", "开启/关闭模拟定位功能（同时联动去除模拟位置检测）", locationSpoofActive,
                 new android.widget.CompoundButton.OnCheckedChangeListener() {
                     public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
                         // ★ 快捷开关：同时控制 模拟定位 + 反模拟位置检测（commit 同步落盘）
@@ -1143,10 +1145,11 @@ public class MainActivity extends SecureActivity {
             case "mt_hide_speed": return "禁止超速检测";
 
             case "mt_auto_refresh_home": return "自动刷新主页";
-            case "mt_anti_mock": return "反模拟位置检测";
+            case "mt_anti_mock": return "去除模拟位置检测";
             case "mt_location_spoof": return "模拟定位";
             case "mt_skip_grab_confirm": return "跳过二次抢单确认";
-            case "mt_green_light": return "锁定绿灯";
+            case "mt_green_light": return "锁定去除红绿灯检测";
+            case "mt_env_guard": return "去除异常环境检测";
             default: return key;
         }
     }
@@ -1163,7 +1166,8 @@ public class MainActivity extends SecureActivity {
             try {
                 String ds = etDelay.getText().toString().trim();
                 int d = Integer.parseInt(ds);
-                if (d < 0) d = 0; if (d > 10000) d = 10000;
+                if (d < 500) d = 500;   // 最小 500ms，防止 0/空值导致 HookInit 按 500ms 疯狂刷新
+                if (d > 10000) d = 10000;
                 capDelayVal = d;
                 prefs.edit().putInt("mt_auto_refresh_delay", capDelayVal).apply();
             } catch (Exception e) { /* 保留 prefs 中的默认值 */ }
