@@ -354,7 +354,7 @@ public class SettingsActivity extends SecureActivity {
         LinearLayout.LayoutParams qrLp = new LinearLayout.LayoutParams(qrSize, qrSize);
         qrLp.setMargins(0, dp2px(12), 0, dp2px(4));
         qrView.setLayoutParams(qrLp);
-        qrView.setScaleType(ImageView.ScaleType.FIT_XY);
+        qrView.setScaleType(ImageView.ScaleType.FIT_CENTER);
         donateContent.addView(qrView);
 
         TextView qrTip = new TextView(this);
