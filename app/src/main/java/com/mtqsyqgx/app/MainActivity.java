@@ -35,18 +35,20 @@ public class MainActivity extends SecureActivity {
 
     // ★ 统一配置路径 /sdcard/ — /data/local/tmp/ 不可写（EACCES），改用/sdcard/
     private static final String HOOK_CONFIG_PATH = "/data/local/tmp/mt_config.json";
+    private static final String SYSTEM_CONFIG_PATH = "/data/system/mt_config.json";
     private static final String LOG_DIR = "/sdcard/Download/lucky/log/";
     private static final String HIDDEN_SETTINGS_PREFS = "mtq_hidden_settings";
     private static final String KEY_HIDDEN_ENTRY_ENABLED = "hidden_entry_enabled";
 
     private static final String[][] APP_KEYS = {
         {"mt_update", "mt_watermark", "mt_screenshot", "mt_anti_detect", "mt_online_check", "mt_dev_options",
-            "mt_time_offset", "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock"}
+            "mt_time_offset", "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_skip_grab_confirm", "mt_green_light"}
     };
 
     private static final String[] ALL_KEYS = {"mt_update", "mt_watermark", "mt_screenshot", "mt_anti_detect",
         "mt_online_check", "mt_dev_options", "mt_time_offset",
-        "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_location_spoof",
+        "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock", "mt_location_spoof", "mt_skip_grab_confirm",
+        "mt_green_light",
         "location_lat", "location_lng"};
 
     private static final String[] TARGET_PACKAGES = {"com.sankuai.meituan.dispatch.crowdsource"};
@@ -858,7 +860,7 @@ public class MainActivity extends SecureActivity {
         SharedPreferences cp = getSharedPreferences("config", MODE_PRIVATE);
         StringBuilder sb = new StringBuilder("[" + ts + "] 应用启动，功能开关基线: ");
         String[] keys = {"mt_location_spoof", "mt_auto_refresh_home", "mt_hide_speed", "mt_anti_mock",
-                "mt_online_check", "show_location_spoof",
+                "mt_online_check", "mt_skip_grab_confirm", "mt_green_light", "show_location_spoof",
                 "mt_auto_refresh_delay", "mt_dev_options"};
         for (int i = 0; i < keys.length; i++) {
             try {
@@ -1143,6 +1145,8 @@ public class MainActivity extends SecureActivity {
             case "mt_auto_refresh_home": return "自动刷新主页";
             case "mt_anti_mock": return "反模拟位置检测";
             case "mt_location_spoof": return "模拟定位";
+            case "mt_skip_grab_confirm": return "跳过二次抢单确认";
+            case "mt_green_light": return "锁定绿灯";
             default: return key;
         }
     }
@@ -1237,12 +1241,14 @@ public class MainActivity extends SecureActivity {
                     String jsonStr = config.toString(2);
 
                     boolean ok = writeFile(HOOK_CONFIG_PATH, jsonStr);
-                    if (!ok) {
+                    boolean systemOk = writeFile(SYSTEM_CONFIG_PATH, jsonStr);
+                    if (!ok || !systemOk) {
                         // 重试一次（su 偶发超时/失败）
                         try { Thread.sleep(300); } catch (InterruptedException ignored) {}
-                        ok = writeFile(HOOK_CONFIG_PATH, jsonStr);
+                        if (!ok) ok = writeFile(HOOK_CONFIG_PATH, jsonStr);
+                        if (!systemOk) systemOk = writeFile(SYSTEM_CONFIG_PATH, jsonStr);
                     }
-                    if (!ok) {
+                    if (!ok || !systemOk) {
                         final String err = "配置保存失败，功能可能不生效，请检查 Root 授权";
                         runOnUiThread(new Runnable() { public void run() { toast(err); } });
                     }

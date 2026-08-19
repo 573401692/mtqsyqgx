@@ -330,6 +330,44 @@ public class SettingsActivity extends SecureActivity {
         aboutCard.addView(aboutContent);
         container.addView(aboutCard);
 
+        // 赞赏支持卡片
+        LinearLayout donateCard = createBaseCard();
+        donateCard.addView(createCardHeader("赞赏支持", COLOR_PRIMARY));
+        donateCard.addView(divider());
+
+        LinearLayout donateContent = new LinearLayout(this);
+        donateContent.setOrientation(LinearLayout.VERTICAL);
+        donateContent.setPadding(dp2px(16), dp2px(14), dp2px(16), dp2px(14));
+        donateContent.setGravity(Gravity.CENTER);
+
+        TextView donateDesc = new TextView(this);
+        donateDesc.setText("如果这个模块帮到了你，欢迎赞赏支持一下作者 ☕\n每一份心意都是持续更新的动力\n金额随意，感谢有你 ❤");
+        donateDesc.setTextSize(13);
+        donateDesc.setTextColor(COLOR_TEXT_SUB);
+        donateDesc.setLineSpacing(3, 1.4f);
+        donateDesc.setGravity(Gravity.CENTER);
+        donateContent.addView(donateDesc);
+
+        ImageView qrView = new ImageView(this);
+        qrView.setImageResource(R.drawable.donate_qr);
+        int qrSize = dp2px(200);
+        LinearLayout.LayoutParams qrLp = new LinearLayout.LayoutParams(qrSize, qrSize);
+        qrLp.setMargins(0, dp2px(12), 0, dp2px(4));
+        qrView.setLayoutParams(qrLp);
+        qrView.setScaleType(ImageView.ScaleType.FIT_XY);
+        donateContent.addView(qrView);
+
+        TextView qrTip = new TextView(this);
+        qrTip.setText("扫一扫，赞赏支持作者");
+        qrTip.setTextSize(12);
+        qrTip.setTextColor(Color.parseColor("#95A5A6"));
+        qrTip.setGravity(Gravity.CENTER);
+        qrTip.setPadding(0, dp2px(6), 0, 0);
+        donateContent.addView(qrTip);
+
+        donateCard.addView(donateContent);
+        container.addView(donateCard);
+
         // 隐藏页面入口卡片
         SharedPreferences hiddenPrefs = getSharedPreferences(HIDDEN_SETTINGS_PREFS, MODE_PRIVATE);
         boolean showHiddenEntry = hiddenPrefs.getBoolean(KEY_HIDDEN_ENTRY_ENABLED, false);

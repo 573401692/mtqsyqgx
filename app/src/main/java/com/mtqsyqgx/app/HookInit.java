@@ -367,7 +367,8 @@ public class HookInit extends XposedModule {
     private void dumpFeatureSwitches() {
         L("=== 功能开关状态 ===");
         String[] keys = {"mt_hide_speed", "mt_location_spoof", "mt_anti_mock", "mt_auto_refresh_home",
-                "mt_auto_refresh_delay", "mt_online_check", "mt_dev_options", "show_location_spoof"};
+                "mt_auto_refresh_delay", "mt_online_check", "mt_green_light", "mt_dev_options", "mt_skip_grab_confirm",
+                "show_location_spoof"};
         for (String k : keys) {
             try {
                 JSONObject c = loadCfg();
@@ -479,8 +480,10 @@ public class HookInit extends XposedModule {
             def.put("mt_hide_speed", true);         // 禁止超速检测
             def.put("mt_time_offset", false);       // 时间偏移（默认关）
             def.put("mt_online_check", true);       // 下线查看完整地址
+            def.put("mt_green_light", true);        // 锁定绿灯（红绿灯显示+上报锁定为绿灯/60s）
             def.put("mt_dev_options", false);       // 开发者选项（默认关）
             def.put("mt_auto_refresh_delay", 1000); // 自动刷新主页间隔(ms)
+            def.put("mt_skip_grab_confirm", false); // 跳过二次抢单确认（默认关）
             def.put("location_lat", 22.533864);     // 默认坐标（深圳）
             def.put("location_lng", 113.930291);
             def.put("location_speed", 0.0);         // 默认速度0
@@ -1653,6 +1656,116 @@ public class HookInit extends XposedModule {
         try { Class<?> fm = cl.loadClass("com.meituan.android.common.fingerprint.FingerprintManager"); hook(fm.getDeclaredMethod("detection", cl.loadClass("android.content.Context"))).intercept(c -> ""); L("[反检测] detection ✓"); logFeature("反检测", true, "detection"); } catch (Throwable t) { Le("反检测 detection", t); logFeature("反检测", false, t.getMessage()); }
         try { Class<?> fm = cl.loadClass("com.meituan.android.common.fingerprint.FingerprintManager"); for (Method m : fm.getDeclaredMethods()) { if ("root".equals(m.getName()) && m.getParameterTypes().length == 0 && m.getReturnType() == int.class) { hook(m).intercept(c -> 0); L("[反检测] root ✓"); break; } } } catch (Throwable t) { Le("反检测 root", t); }
 
+        // ═══ 锁定绿灯（mt_green_light：红绿灯数据拦截锁定，显示+上报全部锁定为绿灯/60s） ═══
+        // 颜色语义：TBT/Safety 层 1=红 2=黄 3=绿；SDK 显示层 201=红 202=黄 203=绿
+        if (p("mt_green_light", false)) {
+            // 1. 显示链路：ConvertUtils.naviTrafficCountDownListTbtToSdk（地图气泡：红→绿，倒计时=60）
+            try {
+                Class<?> cuClass = findClassOrNull(cl, "com.meituan.sankuai.navisdk.utils.ConvertUtils");
+                if (cuClass != null) {
+                    boolean hooked = false;
+                    for (Method m : cuClass.getDeclaredMethods()) {
+                        if (!"naviTrafficCountDownListTbtToSdk".equals(m.getName())) continue;
+                        hook(m).intercept(chain -> {
+                            Object r = chain.proceed();
+                            try {
+                                if (r instanceof java.util.List) {
+                                    for (Object info : (java.util.List<?>) r) fixSdkLight(info);
+                                }
+                            } catch (Throwable ig) {}
+                            return r;
+                        });
+                        L("[绿灯] ✓ 显示链路: ConvertUtils.naviTrafficCountDownListTbtToSdk");
+                        hooked = true;
+                        break;
+                    }
+                    if (!hooked) L("[绿灯] 显示链路方法未找到");
+                } else { L("[绿灯] 未找到 ConvertUtils"); }
+            } catch (Throwable t) { Le("[绿灯] 显示链路异常", t); }
+
+            // 2. 上报数据层：SafeSDKNaviModel$a.onLightCountdownInfo（上报数据源改好）
+            try {
+                Class<?> saClass = findClassOrNull(cl, "com.meituan.banma.trafficsafety.model.SafeSDKNaviModel$a");
+                if (saClass != null) {
+                    boolean hooked = false;
+                    for (Method m : saClass.getDeclaredMethods()) {
+                        if (!"onLightCountdownInfo".equals(m.getName())) continue;
+                        hook(m).intercept(chain -> {
+                            try {
+                                Object arg = chain.getArgs().size() > 1 ? chain.getArgs().get(1) : null;
+                                if (arg instanceof java.util.List) {
+                                    for (Object info : (java.util.List<?>) arg) fixSafetyLight(info);
+                                }
+                            } catch (Throwable ig) {}
+                            return chain.proceed();
+                        });
+                        L("[绿灯] ✓ 上报数据层: SafeSDKNaviModel$a.onLightCountdownInfo");
+                        hooked = true;
+                        break;
+                    }
+                    if (!hooked) L("[绿灯] 上报数据层方法未找到");
+                } else { L("[绿灯] 未找到 SafeSDKNaviModel$a"); }
+            } catch (Throwable t) { Le("[绿灯] 上报数据层异常", t); }
+
+            // 3. 上报层兜底：trafficsafety.a.a（按参数特征过滤 navigationTrafficLightCountdown 上报包）
+            try {
+                Class<?> tfaClass = findClassOrNull(cl, "com.meituan.banma.trafficsafety.a");
+                if (tfaClass != null) {
+                    hookAllMethodsBefore(tfaClass, "a", chain -> {
+                        try {
+                            if (chain.getArgs().size() == 2
+                                    && chain.getArgs().get(0) instanceof String
+                                    && chain.getArgs().get(1) instanceof java.util.Map
+                                    && "navigationTrafficLightCountdown".equals(chain.getArgs().get(0))) {
+                                Object infos = ((java.util.Map<?, ?>) chain.getArgs().get(1)).get("countdownInfos");
+                                if (infos instanceof java.util.List) {
+                                    for (Object info : (java.util.List<?>) infos) fixSafetyLight(info);
+                                }
+                            }
+                        } catch (Throwable ig) {}
+                        return chain.proceed();
+                    });
+                    L("[绿灯] ✓ 上报层兜底: trafficsafety.a.a");
+                } else { L("[绿灯] 未找到 trafficsafety.a"); }
+            } catch (Throwable t) { Le("[绿灯] 上报层异常", t); }
+
+            // 4. 上报网络层：SafeSDKNaviModel$a.onWaitRedLightTime（等红灯时长不上报）
+            try {
+                Class<?> saClass2 = findClassOrNull(cl, "com.meituan.banma.trafficsafety.model.SafeSDKNaviModel$a");
+                if (saClass2 != null) {
+                    boolean hooked = false;
+                    for (Method m : saClass2.getDeclaredMethods()) {
+                        if (!"onWaitRedLightTime".equals(m.getName())) continue;
+                        hook(m).intercept(chain -> {
+                            try {
+                                Object arg = chain.getArgs().size() > 1 ? chain.getArgs().get(1) : null;
+                                if (arg instanceof java.util.List) {
+                                    for (Object item : (java.util.List<?>) arg) {
+                                        if (item == null) continue;
+                                        try { Field f = findFieldUp(item.getClass(), "hasWaitedRedLight"); if (f != null) f.setBoolean(item, false); } catch (Throwable ig) {}
+                                        try { Field f = findFieldUp(item.getClass(), "waitTime"); if (f != null) f.setInt(item, 0); } catch (Throwable ig) {}
+                                    }
+                                }
+                            } catch (Throwable ig) {}
+                            return chain.proceed();
+                        });
+                        L("[绿灯] ✓ 上报网络层: SafeSDKNaviModel$a.onWaitRedLightTime");
+                        hooked = true;
+                        break;
+                    }
+                    if (!hooked) L("[绿灯] 上报网络层方法未找到");
+                }
+            } catch (Throwable t) { Le("[绿灯] 上报网络层异常", t); }
+            logFeature("锁定绿灯", true, "显示+上报四层锁定（绿灯/60s）");
+        }
+
+        // ═══ 9. 跳过二次抢单确认（NoConfirmDialogs） ═══
+        if (p("mt_skip_grab_confirm", false)) {
+            installSkipGrabConfirm(cl);
+            logFeature("跳过二次抢单确认", true, "已安装");
+        } else {
+            logFeature("跳过二次抢单确认", true, "未启用(开关关)");
+        }
 
         dumpFeatureSwitches();
 
@@ -1838,5 +1951,106 @@ public class HookInit extends XposedModule {
             Object t = f.get(holder);
             if (t != null && t.toString().contains("上线")) f.set(holder, replacement);
         } catch (Throwable ig) {}
+    }
+
+    // ═══════════ 跳过二次抢单确认（NoConfirmDialogs） ═══════════
+    // 1) 抢单确认弹窗：core.operation 步骤组件 c() 显示确认弹窗
+    //    → Hook 组件 c()，跳过弹窗，直接回调 e.a(String,String,String)"确认"让流程继续
+    // 2) 转单确认弹窗：directTransfer.e.b(long) 显示"确认接受转单"弹窗
+    //    → Hook 后直接调用私有方法 f(long)（官方新流程直接接受）
+    private void installSkipGrabConfirm(ClassLoader cl) {
+        L("[NoConfirmDialogs] >>> 安装 跳过二次抢单确认");
+        Class<?> eClass = findClassOrNull(cl, "com.meituan.banma.core.operation.modules.e");
+        Class<?> stringClass = findClassOrNull(cl, "java.lang.String");
+        // 提前获取确认回调方法 e.a(String, String, String)（onNotifyProceed）
+        Method mConfirm = null;
+        if (eClass != null && stringClass != null) {
+            try {
+                mConfirm = findMethodUp(eClass, "a", stringClass, stringClass, stringClass);
+                if (mConfirm != null) mConfirm.setAccessible(true);
+            } catch (Throwable t) { mConfirm = null; }
+        }
+        if (mConfirm == null) {
+            L("[NoConfirmDialogs] 初始化失败: mConfirm 为 null");
+            return;
+        }
+        final Method confirm = mConfirm;
+
+        // ===== 1. 抢单/转单确认弹窗组件 =====
+        String[] clsNames = new String[]{"com.meituan.banma.core.operation.modules.s",
+                "com.meituan.banma.core.operation.modules.ac",
+                "com.meituan.banma.core.operation.modules.ai",
+                "com.meituan.banma.core.operation.modules.u",
+                "com.meituan.banma.core.operation.modules.b",
+                "com.meituan.banma.core.operation.modules.r"};
+        for (String n : clsNames) {
+            Class<?> cls = findClassOrNull(cl, n);
+            if (cls != null) {
+                hookAllMethodsBefore(cls, "c", chain -> {
+                    try {
+                        // 跳过弹窗显示，直接回调"确认"让流程继续
+                        confirm.invoke(chain.getThisObject(), null, "0", null);
+                        L("[NoConfirmDialogs] 已跳过确认弹窗 [" + cls.getName() + "]，直接继续");
+                        return null; // 跳过原方法
+                    } catch (Throwable e) {
+                        L("[NoConfirmDialogs] hook异常 [" + cls.getName() + "]: " + e);
+                        return chain.proceed();
+                    }
+                });
+                L("[NoConfirmDialogs] 已挂载: " + n);
+            } else {
+                L("[NoConfirmDialogs] 类未找到: " + n);
+            }
+        }
+
+        // ===== 2. 转单确认弹窗：directTransfer.e.b(long) → 直接 f(long) =====
+        Class<?> eTsfClass = findClassOrNull(cl, "com.meituan.banma.waybill.coreflow.directTransfer.e");
+        if (eTsfClass != null) {
+            hookAllMethodsBefore(eTsfClass, "b", chain -> {
+                try {
+                    if (chain.getArgs().size() == 1 && chain.getArgs().get(0) instanceof Long) {
+                        // 官方新流程直接接受（跳过"确认接受转单"弹窗）
+                        callAnyMethod(chain.getThisObject(), "f", chain.getArgs().get(0));
+                        L("[NoConfirmDialogs] 已跳过转单确认弹窗，直接接受");
+                        return null;
+                    }
+                } catch (Throwable e) {
+                    L("[NoConfirmDialogs] 转单hook异常: " + e);
+                }
+                return chain.proceed();
+            });
+            L("[NoConfirmDialogs] 已Hook: directTransfer.e.b (转单确认)");
+        }
+
+        L("[NoConfirmDialogs] 插件加载完成");
+    }
+
+    /** ★ 锁定绿灯辅助：SDK 显示层红绿灯对象（红201→绿203，倒计时→60） */
+    private void fixSdkLight(Object info) {
+        if (info == null) return;
+        try {
+            Object color = callAnyMethod(info, "getLightColor");
+            if (color instanceof Number && ((Number) color).intValue() == 201) {
+                callAnyMethod(info, "setLightColor", 203);
+            }
+        } catch (Throwable ig) {}
+        try { callAnyMethod(info, "setCountdown", 60); } catch (Throwable ig) {}
+    }
+
+    /** ★ 锁定绿灯辅助：Safety 层红绿灯对象（public color/downCount 字段，3=绿，倒计时=60） */
+    private void fixSafetyLight(Object info) {
+        if (info == null) return;
+        try { Field f = findFieldUp(info.getClass(), "color"); if (f != null) f.setInt(info, 3); } catch (Throwable ig) {}
+        try { Field f = findFieldUp(info.getClass(), "downCount"); if (f != null) f.setInt(info, 60); } catch (Throwable ig) {}
+    }
+
+    /** 按精确参数类型向上查找方法（含父类），找不到返回 null */
+    private Method findMethodUp(Class<?> c, String name, Class<?>... pts) {
+        Class<?> cur = c;
+        while (cur != null && cur != Object.class) {
+            try { return cur.getDeclaredMethod(name, pts); } catch (NoSuchMethodException ig) {}
+            cur = cur.getSuperclass();
+        }
+        return null;
     }
 }
