@@ -9,8 +9,8 @@ android {
         applicationId "com.mtqsyqgx.app"
         minSdkVersion 30
         targetSdkVersion 35
-        versionCode 180
-        versionName "1.8.0"
+        versionCode 181
+        versionName "1.8.1"
     }
 
     signingConfigs {
@@ -35,8 +35,9 @@ android {
             signingConfig signingConfigs.release
         }
         release {
-            minifyEnabled false
-            shrinkResources false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
     }
