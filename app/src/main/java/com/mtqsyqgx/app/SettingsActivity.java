@@ -47,7 +47,7 @@ public class SettingsActivity extends SecureActivity {
     private static final int STATE_IDLE = 0;
     private static final int STATE_APP_NAME_CLICKED_1 = 1;
     private static final int STATE_APP_NAME_CLICKED_2 = 2;
-    private static final int STATE_APP_NAME_CLICKED_3 = 3; // 完成第一步：点击众包小助手3次
+    private static final int STATE_APP_NAME_CLICKED_3 = 3; // 完成第一步：点击众包小助手Lite3次
     private static final int STATE_UPDATE_CLICKED_1 = 4;
     private static final int STATE_UPDATE_CLICKED_2 = 5; // 完成第二步：点击检查更新2次
     // 第三步：长按清除配置，完成后触发隐藏页面
@@ -282,12 +282,12 @@ public class SettingsActivity extends SecureActivity {
         aboutContent.setGravity(Gravity.CENTER);
 
         TextView appName = new TextView(this);
-        appName.setText("众包小助手");
+        appName.setText("众包小助手 Lite");
         appName.setTextSize(20);
         appName.setTypeface(Typeface.DEFAULT_BOLD);
         appName.setTextColor(COLOR_TEXT_MAIN);
         appName.setGravity(Gravity.CENTER);
-        // 点击"众包小助手"三次触发隐藏入口（组合操作第一步）
+        // 点击"众包小助手 Lite"三次触发隐藏入口（组合操作第一步）
         appName.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 long now = System.currentTimeMillis();
@@ -350,7 +350,7 @@ public class SettingsActivity extends SecureActivity {
 
         ImageView qrView = new ImageView(this);
         qrView.setImageResource(R.drawable.donate_qr);
-        int qrSize = dp2px(200);
+        int qrSize = dp2px(260);
         LinearLayout.LayoutParams qrLp = new LinearLayout.LayoutParams(qrSize, qrSize);
         qrLp.setMargins(0, dp2px(12), 0, dp2px(4));
         qrView.setLayoutParams(qrLp);
@@ -737,7 +737,7 @@ public class SettingsActivity extends SecureActivity {
                     java.io.FileWriter rw = new java.io.FileWriter(readme);
                     int vc = 0;
                     try { vc = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Throwable ignored) {}
-                    rw.write("众包小助手 v" + getAppVersionName() + " (build " + vc + ")\n");
+                    rw.write("众包小助手 Lite v" + getAppVersionName() + " (build " + vc + ")\n");
                     rw.write("导出时间: " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date()) + "\n");
                     rw.write("Android: " + android.os.Build.VERSION.RELEASE + " (API " + android.os.Build.VERSION.SDK_INT + ")\n");
                     rw.write("设备: " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL + "\n\n");

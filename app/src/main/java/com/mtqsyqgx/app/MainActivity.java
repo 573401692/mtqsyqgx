@@ -581,7 +581,7 @@ public class MainActivity extends SecureActivity {
         textCol.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
         TextView tvTitle = new TextView(this);
-        tvTitle.setText("众包小助手");
+        tvTitle.setText("众包小助手 Lite");
         tvTitle.setTextSize(20);
         tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
         tvTitle.setTextColor(Color.WHITE);
