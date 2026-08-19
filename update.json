@@ -1,8 +1,8 @@
 {
-  "versionCode":182,
-  "versionName": "1.8.2",
-  "updateLog": "增强红绿灯检测功能\n尝试性拦截异常环境检测",
-  "apkUrl": "https://gitee.com/awana/mtqsyqgx/releases/download/app-1.8.2/app-Lite.apk",
+  "versionCode":183,
+  "versionName": "1.8.3",
+  "updateLog": "修复自动刷新延迟无法保存问题",
+  "apkUrl": "https://gitee.com/awana/mtqsyqgx/releases/download/app-1.8.3/app-Lite.apk",
   "forceUpdate": false,
   "Joingroup": "826759897",
   "JoingroupUrl": "https://qm.qq.com/q/48eX8p8qLS"
